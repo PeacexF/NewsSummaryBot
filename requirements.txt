@@ -3,3 +3,5 @@ requests
 feedparser
 aiohttp
 dotenv
+bs4
+beautifulsoup4 lxml

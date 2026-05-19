@@ -1,12 +1,6 @@
-2026-05-19 15:25:35 [INFO] NewsSummary (run_collector.py:23): Started fecthing 3 channels
-2026-05-19 15:25:35 [INFO] NewsSummary (rss.py:95): RSS fetch failed | https://rsshub.app/telegram/channel/rbc_news | 403, message='Forbidden', url='https://rsshub.app/telegram/channel/rbc_news'
-2026-05-19 15:25:35 [INFO] NewsSummary (rss.py:95): RSS fetch failed | https://rsshub.app/telegram/channel/durov | 403, message='Forbidden', url='https://rsshub.app/telegram/channel/durov'
-2026-05-19 15:25:35 [INFO] NewsSummary (rss.py:95): RSS fetch failed | https://rsshub.app/telegram/channel/cybers | 403, message='Forbidden', url='https://rsshub.app/telegram/channel/cybers'
-2026-05-19 15:51:51 [ERROR] asyncio (base_events.py:1875): Unclosed client session
-client_session: <aiohttp.client.ClientSession object at 0x10716f770>
-2026-05-19 15:55:23 [INFO] NewsSummary (run_collector.py:25): Started fetching from rsshub
-2026-05-19 15:55:25 [INFO] NewsSummary (run_collector.py:36): Total posts: 50
-2026-05-19 15:55:25 [INFO] NewsSummary (run_collector.py:37): Last 24h: 32
-2026-05-19 15:57:10 [INFO] NewsSummary (run_collector.py:25): Started fetching from rsshub
-2026-05-19 15:57:11 [INFO] NewsSummary (run_collector.py:36): Total posts: 50
-2026-05-19 15:57:11 [INFO] NewsSummary (run_collector.py:37): Last 24h: 32
+2026-05-19 16:29:01 [INFO] NewsSummary (run_collector.py:27): Started fetching from rsshub
+2026-05-19 16:29:02 [INFO] NewsSummary (run_collector.py:38): Total posts: 50
+2026-05-19 16:29:02 [INFO] NewsSummary (run_collector.py:39): Last 24h: 32
+2026-05-19 16:29:51 [INFO] NewsSummary (run_collector.py:27): Started fetching from rsshub
+2026-05-19 16:29:52 [INFO] NewsSummary (run_collector.py:38): Total posts: 50
+2026-05-19 16:29:52 [INFO] NewsSummary (run_collector.py:39): Last 24h: 32

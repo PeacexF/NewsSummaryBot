@@ -1,6 +1,7 @@
 import sys
 import asyncio
 import os
+
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from dotenv import load_dotenv
@@ -10,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))   # to import properly
 from rss import RSSCollector  
 from log.log import logger
 # from config import smth maybe later idk
+
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 RSSHUB_BASE = os.getenv("RSSHUB_BASE")
@@ -38,7 +40,7 @@ async def main():
 
     for i, post in enumerate(fresh_posts[:3], 1):   # Test
         print(f"\n[{i}] Канал: @{post.source_name} | Дата: {post.published_at}")
-        print(f"Текст: {post.text[:150]}...")
+        print(f"Текст: {post.text}")
 
     await collector.close()
 

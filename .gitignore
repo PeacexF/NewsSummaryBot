@@ -12,5 +12,5 @@ venv/
 *.njsproj
 *.sln
 *.sw?
-config/
-error*
+# Honestly such a nice thing to read errors easily
+error.txt

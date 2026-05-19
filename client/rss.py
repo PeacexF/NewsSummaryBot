@@ -20,7 +20,8 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlparse
 
-from log.log import logger  # Logging
+from log.log import logger              # Logging
+from parser import HTMLContentParser    # Parser on bs4
 
 
 USER_AGENT = (
@@ -43,6 +44,7 @@ class RSSItem:
 
     text: str | None
     raw_html: str | None
+    image_urls: list[str]
 
     link: str | None
 
@@ -140,6 +142,7 @@ class RSSCollector:
 
             if isinstance(result, Exception):
                 logger.error("Fail in fetch_many %s", result)
+                continue
 
             all_items.extend(result)
 
@@ -151,7 +154,9 @@ class RSSCollector:
 
         raw_html = (entry.get("summary") or entry.get("description"))
 
-        clean_text = self._html_to_text(raw_html)
+        parse_result = HTMLContentParser.parse_entry_html(raw_html)
+        clean_text = parse_result.clean_text
+        image_urls = parse_result.image_urls
 
         link = entry.get("link")
 
@@ -185,6 +190,7 @@ class RSSCollector:
 
             text=clean_text,
             raw_html=raw_html,
+            image_urls=image_urls,
 
             link=link,
 
