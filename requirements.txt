@@ -1,1 +1,4 @@
 telethon
+requests
+feedparser
+aiohttp
