@@ -1,3 +1,10 @@
+# This module reads and collects data from the rss stream
+#
+# class RSSCollector is then imported into run_collector.py
+# Requires a self hosted RSSHub
+# as it does not route it's requests through a proxy, doen't randomise User Agents and has no randomised request time
+# Cloudflare just answers with 403 if you try to run it on a public instance of RSS
+
 from __future__ import annotations
 
 import aiohttp
@@ -5,7 +12,6 @@ import feedparser
 import asyncio
 import hashlib
 import html
-import logging
 import re
 
 from dataclasses import dataclass, asdict
@@ -96,7 +102,8 @@ class RSSCollector:
             logger.info("RSS fetch failed | %s | %s", url, e)
             return []
 
-        parsed = feedparser.parse(content)
+        parsed = await asyncio.to_thread(feedparser.parse, content)
+        # Turns out it's synchronous and severily bottlenecks everything here
 
         fetched_at = datetime.now(timezone.utc)
 

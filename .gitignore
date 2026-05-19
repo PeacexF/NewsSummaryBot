@@ -13,3 +13,4 @@ venv/
 *.sln
 *.sw?
 config/
+error*
