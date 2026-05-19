@@ -1,39 +1,47 @@
-import asyncio
-import hashlib
-import logging
-import html
-import re
+from __future__ import annotations
+
 import aiohttp
 import feedparser
+import asyncio
+import hashlib
+import html
+import logging
+import re
 
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlparse
-from __future__ import annotations
 
-
-logger = logging.getLogger(__name__)    # should add better logging tbh
+from log.log import logger  # Logging
 
 
 USER_AGENT = (
-    "NewsSummaryBot "
-    "(RSSHub Telegram Fetcher)"
+    "NewsSummaryBot"
+    "(RSSHub Telegram Collector)"
 )
 
-HTML_TAG_RE = re.compile(r"<[^>]+>")    # for future
+
+HTML_TAG_RE = re.compile(r"<[^>]+>")
+
 
 @dataclass(slots=True)
 class RSSItem:
     source_url: str
-    feed_title: str | None
+
+    source_type: str
+    source_name: str | None
 
     title: str | None
+
     text: str | None
+    raw_html: str | None
+
     link: str | None
 
     published_at: datetime | None
+    fetched_at: datetime
 
     entry_id: str
     hash: str
@@ -45,22 +53,11 @@ class RSSItem:
 
 
 class RSSCollector:
-#    Minimal async RSS collector.
-#
-#    Responsibilities:
-#    - fetch RSS XML
-#    - parse feed
-#    - normalize entries
-#    - return structured items
-#
-#    DOES NOT:
-#    - summarize
-#    - filter
-#    - store to DB
-#    - deduplicate globally
 
-    def __init__(self, timeout: int = 20, max_connections: int = 20,):
+    def __init__(self, timeout: int = 20, max_connections: int = 20) -> None:
+
         self.timeout = timeout
+
         self.connector = aiohttp.TCPConnector(
             limit=max_connections,
             ssl=False,
@@ -68,23 +65,24 @@ class RSSCollector:
 
         self.session: aiohttp.ClientSession | None = None
 
-    async def start(self):
+    async def start(self) -> None:
+
         if self.session:
             return
 
         self.session = aiohttp.ClientSession(
             connector=self.connector,
             timeout=aiohttp.ClientTimeout(total=self.timeout),
-            headers={
-                "User-Agent": USER_AGENT,
-            },
+            headers={"User-Agent": USER_AGENT}
         )
 
     async def close(self) -> None:
+
         if self.session:
             await self.session.close()
 
-    async def fetch_feed(self, url: str) -> list[RSSItem]:  # 1 single feed / url
+    async def fetch_feed(self, url: str) -> list[RSSItem]:
+
         if not self.session:
             raise RuntimeError("RSSCollector.start() was not called")
 
@@ -95,85 +93,96 @@ class RSSCollector:
                 content = await response.text()
 
         except Exception as e:
-            logger.exception("Failed to fetch RSS feed: %s | error=%s", url, e,)
+            logger.info("RSS fetch failed | %s | %s", url, e)
             return []
 
         parsed = feedparser.parse(content)
+
+        fetched_at = datetime.now(timezone.utc)
 
         feed_title = parsed.feed.get("title")
 
         items: list[RSSItem] = []
 
         for entry in parsed.entries:
+
             try:
                 item = self._parse_entry(
                     source_url=url,
                     feed_title=feed_title,
                     entry=entry,
+                    fetched_at=fetched_at,
                 )
 
                 items.append(item)
 
             except Exception as e:
-                logger.exception("Failed to parse RSS entry: %s | error=%s", url, e,)
+                logger.info("RSS entry parse failed | %s | %s", url, e)
 
         return items
 
-    async def fetch_many(self ,urls: list[str]) -> list[RSSItem]:   # multiple
+    async def fetch_many(self, urls: list[str]) -> list[RSSItem]:
+
         tasks = [self.fetch_feed(url) for url in urls]
 
-        results = await asyncio.gather(
-            *tasks,
-            return_exceptions=True,
-        )
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
         all_items: list[RSSItem] = []
 
         for result in results:
+
             if isinstance(result, Exception):
-                continue
+                logger.error("Fail in fetch_many %s", result)
 
             all_items.extend(result)
 
         return all_items
 
-    def _parse_entry(self, source_url: str, feed_title: str | None, entry: Any) -> RSSItem:
+    def _parse_entry(self, source_url: str, feed_title: str | None, entry: Any, fetched_at: datetime) -> RSSItem:
 
         title = self._clean(entry.get("title"))
-        summary = self._clean(entry.get("summary"))
-        content = self._extract_content(entry)
 
-        text = content or summary
+        raw_html = (entry.get("summary") or entry.get("description"))
+
+        clean_text = self._html_to_text(raw_html)
 
         link = entry.get("link")
-
-        entry_id = (
-            entry.get("id")
-            or entry.get("guid")
-            or link
-            or self._fallback_id(title, text)
-        )
 
         published_at = self._parse_datetime(
             entry.get("published")
             or entry.get("updated")
         )
 
+        entry_id = (
+            entry.get("id") or entry.get("guid") or link
+            or self._fallback_id(
+                title,
+                clean_text,
+            )
+        )
+
+        source_name = self._extract_source_name(source_url, link)
+
         item_hash = self._make_hash(
             title=title,
-            text=text,
-            link=link,
+            text=clean_text,
         )
 
         return RSSItem(
             source_url=source_url,
-            feed_title=feed_title,
+
+            source_type="telegram_rsshub",
+            source_name=source_name,
 
             title=title,
-            text=text,
+
+            text=clean_text,
+            raw_html=raw_html,
+
             link=link,
 
             published_at=published_at,
+            fetched_at=fetched_at,
 
             entry_id=str(entry_id),
             hash=item_hash,
@@ -182,24 +191,48 @@ class RSSCollector:
         )
 
     @staticmethod
-    def _extract_content(entry: Any) -> str | None:
-        content = entry.get("content")
+    def _html_to_text(value: str | None) -> str | None:
 
-        if not content:
-            return None
-        if not isinstance(content, list):
-            return None
-        if not content:
-            return None
-        
-        first = content[0]
-        if not isinstance(first, dict):
+        if not value:
             return None
 
-        return first.get("value")
+        value = re.sub(
+            r"<br\s*/?>",
+            "\n",
+            value,
+            flags=re.I,
+        )
+
+        value = HTML_TAG_RE.sub("", value)
+
+        value = html.unescape(value)
+
+        value = value.strip()
+
+        if not value:
+            return None
+
+        return value
+
+    @staticmethod
+    def _extract_source_name(source_url: str,post_url: str | None) -> str | None:
+
+        if post_url:
+            parsed = urlparse(post_url)
+
+            path = parsed.path.strip("/")
+
+            if path:
+                return path.split("/")[0]
+
+        if "/telegram/channel/" in source_url:
+            return source_url.rstrip("/").split("/")[-1]
+
+        return None
 
     @staticmethod
     def _clean(value: Any) -> str | None:
+
         if not value:
             return None
 
@@ -211,9 +244,7 @@ class RSSCollector:
         return value
 
     @staticmethod
-    def _parse_datetime(
-        value: str | None,
-    ) -> datetime | None:
+    def _parse_datetime(value: str | None) -> datetime | None:
 
         if not value:
             return None
@@ -226,56 +257,20 @@ class RSSCollector:
 
             return dt.astimezone(timezone.utc)
 
-        except Exception:
-            return None
+        except Exception as e:
+            logger.info(f"datetime error: {e}")
 
     @staticmethod
-    def _fallback_id(
-        title: str | None,
-        text: str | None,
-    ) -> str:
+    def _fallback_id(title: str | None, text: str | None) -> str:
 
         base = f"{title or ''}:{text or ''}"
 
-        return hashlib.sha256(
-            base.encode("utf-8"),
-        ).hexdigest()
+        return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
     @staticmethod
-    def _make_hash(
-        title: str | None,
-        text: str | None,
-        link: str | None,
-    ) -> str:
+    def _make_hash(title: str | None, text: str | None) -> str:
 
-        base = (
-            f"{title or ''}"
-            f"{text or ''}"
-            f"{link or ''}"
-        )
+        normalized = (f"{title or ''}\n{text or ''}").lower()
+        normalized = re.sub(r"\s+", " ", normalized)
 
-        return hashlib.sha256(
-            base.encode("utf-8"),
-        ).hexdigest()
-
-
-
-async def main():
-    collector = RSSCollector()
-
-    await collector.start()
-
-    items = await collector.fetch_many([
-        "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
-        "https://feeds.bbci.co.uk/news/rss.xml",
-    ])
-
-    for item in items:
-        print(item.to_dict())
-
-    await collector.close()
-
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
