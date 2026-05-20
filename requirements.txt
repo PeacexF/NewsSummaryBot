@@ -5,3 +5,4 @@ aiohttp
 dotenv
 bs4
 beautifulsoup4 lxml
+sqlalchemy
