@@ -1,7 +1,6 @@
 # Save logic for the DB
 # Checks hash for deduplication
 # Saves `RSSItem` list into the db
-# I will rewrite comments in english a bit later
 
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ class NewsRepository:
         channel = result.scalar_one_or_none()
 
         if not channel:
-            logger.info("Database | Adding new channel to monitor: @%s", username)
+            logger.info(f"DATABASE | Adding new channel to monitor: @{username}")
             channel = Channel(username=username, title=username)
             self.session.add(channel)
             await self.session.flush()
@@ -33,15 +32,15 @@ class NewsRepository:
         return channel
 
     async def save_rss_items(self, items: list[RSSItem]) -> int:
-        # Сохраняет список RSSItem в базу данных.
-        # Пропускает дубликаты по post_hash.
-        # Возвращает количество успешно добавленных новых постов.
+        # saves the RSSItem list to db
+        # deduplicates via hash
+        # returns the number of new posts
         if not items:
             return 0
 
         saved_count = 0
 
-        # Кэш для каналов в рамках одной пачки, чтобы не трогать базу на каждый пост
+        # caching the channels in a single "pack" to not interact with the db every single time
         channel_cache: dict[str, int] = {}
 
         for item in items:
@@ -50,7 +49,7 @@ class NewsRepository:
 
             username = item.source_name.lower()
 
-            # Получаем ID канала (из кэша или из базы)
+            # get channel id (either from cache or db)
             if username in channel_cache:
                 channel_id = channel_cache[username]
             else:
@@ -58,7 +57,7 @@ class NewsRepository:
                 channel_id = channel.id
                 channel_cache[username] = channel_id
 
-            # дедупликация
+            # deduplication
             stmt = insert(Post).values(
                 channel_id=channel_id,
                 entry_id=item.entry_id,
@@ -79,9 +78,8 @@ class NewsRepository:
 
         if saved_count > 0:
             await self.session.commit()
-            logger.info("Database | Successfully saved %d new posts to DB", saved_count)
+            logger.info(f"DATABASE | Successfully saved {saved_count} new posts to DB")
         else:
             await self.session.rollback()
 
         return saved_count
-    # комменты же на английском были везде, ладно

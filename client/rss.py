@@ -102,7 +102,7 @@ class RSSCollector:
                 content = await response.text()
 
         except Exception as e:
-            logger.info("RSS fetch failed | %s | %s", url, e)
+            logger.info("RSS | Fetch failed: | %s | %s", url, e)
             return []
 
         parsed = await asyncio.to_thread(feedparser.parse, content)
@@ -126,7 +126,7 @@ class RSSCollector:
                 items.append(item)
 
             except Exception as e:
-                logger.info("RSS entry parse failed | %s | %s", url, e)
+                logger.info("RSS | Entry parse failed | %s | %s", url, e)
 
         return items
 
@@ -141,7 +141,7 @@ class RSSCollector:
         for result in results:
 
             if isinstance(result, Exception):
-                logger.error("Fail in fetch_many %s", result)
+                logger.error("RSS | Fail in fetch_many %s", result)
                 continue
 
             all_items.extend(result)
@@ -271,7 +271,7 @@ class RSSCollector:
             return dt.astimezone(timezone.utc)
 
         except Exception as e:
-            logger.info(f"datetime error: {e}")
+            logger.info(f"RSS | datetime error: {e}")
 
     @staticmethod
     def _fallback_id(title: str | None, text: str | None) -> str:

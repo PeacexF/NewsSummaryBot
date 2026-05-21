@@ -89,7 +89,8 @@ The project is designed to run using Docker:
 docker-compose up --build
 ````
 
-Optional RSSHub integration is included for self hosted RSSHubs, you may need it as Clouflare **blocks** requests on a public RSSHub
+Optional RSSHub integration is included for self hosted RSSHubs, you may need it as Clouflare **blocks** requests on a public RSSHub  
+This might be just me being blocked because my ip is listed on several ban lists, I would say it's more stable to run your own rss anyway
 
 ---
 

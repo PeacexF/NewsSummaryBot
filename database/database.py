@@ -22,7 +22,7 @@ if not DATABASE_URL:
 
 engine = create_async_engine(
     DATABASE_URL,
-    echo=True,          # shows raw sql queries, will remove later cuz they ruin the logs
+    echo=False,          # shows raw sql queries if True
     pool_pre_ping=True,
 )
 

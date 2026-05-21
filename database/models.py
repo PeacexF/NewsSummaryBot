@@ -65,7 +65,11 @@ class Post(Base):
         server_default=func.now()
     )
 
-    channel: Mapped[Channel] = relationship("Channel", back_populates="posts")
+    channel: Mapped[Channel] = relationship(
+        "Channel",
+        back_populates="posts",
+        lazy="raise"
+    )
 
     def __repr__(self) -> str:
         return f"<Post hash={self.post_hash[:8]} summarized={self.is_summarized}>"
