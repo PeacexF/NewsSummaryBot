@@ -14,3 +14,4 @@ venv/
 *.sw?
 assets/*
 !prompt.md
+log.log
