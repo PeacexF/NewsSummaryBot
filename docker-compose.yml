@@ -1,5 +1,15 @@
 version: '3.8'
 
+# This docker compose gets postgres and rsshub up.
+# Be careful with the db password as it is set open to the world rn
+
+# .env format:
+# RSSHUB_BASE="http://ip:1200/telegram/channel/{channel}"
+# DB_USER=
+# DB_PASSWORD=at least 16char long i would recommend
+# DB_NAME=
+# DATABASE_URL=postgresql+asyncpg://user:password@ip:5432/db_name
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -11,7 +21,7 @@ services:
       POSTGRES_DB: ${DB_NAME}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "127.0.0.1:5432:5432"
+      - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     deploy:

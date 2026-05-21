@@ -1,5 +1,5 @@
 # Taken from another project
-# Probably temporary (most likely no, it's working and that's enough)
+
 
 import logging
 from logging.handlers import TimedRotatingFileHandler

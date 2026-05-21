@@ -1,33 +1,40 @@
-import sys
 import asyncio
 import os
 
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from dotenv import load_dotenv
 
-sys.path.insert(0, str(Path(__file__).parent.parent))   # to import properly
-
-from rss import RSSCollector  
+from client.rss import RSSCollector  
 from log.log import logger
-# from config import smth maybe later idk
+from database.database import init_models, AsyncSessionLocal
+from database.repository import NewsRepository
 
 
-load_dotenv(Path(__file__).parent.parent / ".env")
+load_dotenv()
 RSSHUB_BASE = os.getenv("RSSHUB_BASE")
 
-CHANNELS = ["durov", "rbc_news", "cybers"]  # Паша разбань мне акк в тг!!!
+CHANNELS = ["durov", "rbc_news", "cybers"]
 
 async def main():
-    collector = RSSCollector(timeout=30, max_connections=10)
-    await collector.start()
+    logger.info("Initializing DB")
+    await init_models()
 
+
+    collector = RSSCollector(timeout=30, max_connections=10)
+
+    await collector.start()
     urls = [RSSHUB_BASE.format(channel=ch) for ch in CHANNELS]
 
     logger.info(f"Started fetching from rsshub")
-    
     items = await collector.fetch_many(urls)
-    
+    await collector.close()
+    logger.info(f"Total posts fetched: {len(items)}")
+
+    async with AsyncSessionLocal() as session:
+        repo = NewsRepository(session)
+        new_posts_inserted = await repo.save_rss_items(items)
+
+"""
     time_threshold = datetime.now(timezone.utc) - timedelta(days=1) # last 24h
     fresh_posts = []
 
@@ -41,8 +48,7 @@ async def main():
     for i, post in enumerate(fresh_posts[:3], 1):   # Test
         print(f"\n[{i}] Канал: @{post.source_name} | Дата: {post.published_at}")
         print(f"Текст: {post.text}")
-
-    await collector.close()
+"""
 
 if __name__ == "__main__":
     asyncio.run(main())

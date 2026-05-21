@@ -5,6 +5,7 @@
 # as it does not route it's requests through a proxy, doen't randomise User Agents and has no randomised request time
 # Cloudflare just answers with 403 if you try to run it on a public instance of RSS
 
+
 from __future__ import annotations
 
 import aiohttp
@@ -20,8 +21,8 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlparse
 
-from log.log import logger              # Logging
-from parser import HTMLContentParser    # Parser on bs4
+from log.log import logger                      # Logging
+from client.parser import HTMLContentParser     # Parser on bs4
 
 
 USER_AGENT = (
@@ -105,7 +106,6 @@ class RSSCollector:
             return []
 
         parsed = await asyncio.to_thread(feedparser.parse, content)
-        # Turns out it's synchronous and severily bottlenecks everything here
 
         fetched_at = datetime.now(timezone.utc)
 

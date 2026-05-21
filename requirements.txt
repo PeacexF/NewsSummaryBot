@@ -6,3 +6,5 @@ dotenv
 bs4
 beautifulsoup4 lxml
 sqlalchemy
+asyncpg
+greenlet
