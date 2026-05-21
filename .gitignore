@@ -12,6 +12,18 @@ venv/
 *.njsproj
 *.sln
 *.sw?
+
+
 assets/*
 !prompt.md
+# Один файл просто не может заигнорить чучело
 log.log
+*.log
+log/*
+!log.py
+log*
+log.log
+no_commit.log
+
+
+!cry.txt
