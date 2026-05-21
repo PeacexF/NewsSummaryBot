@@ -12,6 +12,5 @@ venv/
 *.njsproj
 *.sln
 *.sw?
-# Honestly such a nice thing to read errors easily
-error.txt
-output.txt
+assets/*
+!prompt.md
