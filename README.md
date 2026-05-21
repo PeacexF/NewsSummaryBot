@@ -1,9 +1,9 @@
-# RSS News Summarizer Telegram Bot
+# News Summarizer Telegram Bot
 
-A Telegram bot that collects news from RSS feeds, processes them, and delivers AI-generated summaries directly to users.
+A Telegram bot that collects news from RSS feeds, processes them, deduplicates them, and delivers AI-generated summaries.
 
 The project is designed as a modular pipeline:  
-`data collection → filtering → processing → delivery`
+`data collection → storage → filtering → processing → delivery`
 
 ---
 
@@ -12,10 +12,11 @@ The project is designed as a modular pipeline:
 The system follows a pipeline approach:
 
 1. Collect RSS feed data from a self hosted rsshub
-2. Normalize and prepare raw articles  
-3. Filter and remove irrelevant or duplicate content  
-4. Process articles into short summaries using an LLM  
-5. Deliver results through a Telegram bot interface  
+2. Normalize and prepare raw articles
+3. Store them into the Database
+4. Filter and remove irrelevant or duplicate content  
+5. Process articles into short summaries using an LLM  
+6. Deliver results through a Telegram bot interface  
 
 ---
 
@@ -23,19 +24,18 @@ The system follows a pipeline approach:
 
 ``` text
 ├── Dockerfile
-├── RSSHUB
-│   └── docker-compose.yml
+├── docker-compose.yml
+├── main.py
 ├── bot
 │   ├── handlers.py
 │   └── main.py
 ├── client
 │   ├── parser.py
-│   ├── rss.py
-│   └── run_collector.py
+│   └── rss.py
 ├── database
 │   ├── database.py
-│   └── models.py
-├── docker-compose.yml
+│   ├── models.py
+│   └── repository.py
 ├── log
 │   ├── log.log
 │   └── log.py
@@ -72,7 +72,7 @@ Responsible for transforming raw articles into usable content:
 ### Database Layer
 Handles storage:
 - stores articles and processed results
-- maintains state
+- gives access to the results for the processing layer
 
 ---
 
@@ -89,7 +89,7 @@ The project is designed to run using Docker:
 docker-compose up --build
 ````
 
-Optional RSSHub integration is included for self hosted RSSHubs, you may need it as Clouflare blocks requests on a public RSSHub
+Optional RSSHub integration is included for self hosted RSSHubs, you may need it as Clouflare **blocks** requests on a public RSSHub
 
 ---
 
@@ -99,17 +99,26 @@ Optional RSSHub integration is included for self hosted RSSHubs, you may need it
 * Docker & Docker Compose
 * Telegram Bot Token
 * LLM API key for summarization
-* (Optional) A Server for RSSHub
+* (Optional) A Server for RSSHub and Postgresql
 
 ---
 
 ## Environment Variables
 
 ```
-RSSHUB_BASE="http://ip:port_of_your_server/telegram/channel/{channel}"
-TELEGRAM_BOT_TOKEN=your_token
-GEMINI_API_KEY=your_key
-DATABASE_URL=your_database_url
+TELEGRAM_BOT_TOKEN=token
+
+GEMINI_API_KEY=key
+
+RSSHUB_BASE="http://ip:1200/telegram/channel/{channel}"
+
+DB_USER=user
+
+DB_PASSWORD=password
+
+DB_NAME=name
+
+DATABASE_URL=postgresql+asyncpg://user:password@ip:5432/name
 ```
 
 ---
