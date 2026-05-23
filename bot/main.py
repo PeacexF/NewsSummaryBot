@@ -1,3 +1,9 @@
+# There is no logging for the bot messages and messages from users, only technical server side stuff.
+# There never will be for privacy reasons.
+# I value it a lot and i think that the client's / user's privacy should be respected
+# Also, it accepts API Keys, which is the second reason for 'no logging'
+
+
 from __future__ import annotations
 
 import asyncio
