@@ -1,6 +1,5 @@
 # This module reads and collects data from the rss stream
 #
-# class RSSCollector is then imported into run_collector.py
 # Requires a self hosted RSSHub
 # as it does not route it's requests through a proxy, doen't randomise User Agents and has no randomised request time
 # Cloudflare just answers with 403 if you try to run it on a public instance of RSS

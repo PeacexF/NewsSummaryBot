@@ -32,7 +32,7 @@ class HTMLContentParser:
             if src:
                 image_urls.append(src.strip())
 
-        # Formatting <a> tahs to save the urls for AI
+        # Formatting <a> tags to save the urls for AI
         for a_tag in soup.find_all("a"):
             href = a_tag.get("href")
             link_text = a_tag.get_text().strip()

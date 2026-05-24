@@ -9,6 +9,7 @@ version: '3.8'
 # DB_PASSWORD=at least 16char long i would recommend
 # DB_NAME=
 # DATABASE_URL=postgresql+asyncpg://user:password@ip:5432/db_name
+# TELEGRAM_BOT_TOKEN=
 
 services:
   postgres:

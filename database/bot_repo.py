@@ -19,7 +19,7 @@ class BotRepository:
     async def get_or_create_user(self, tg_id: int, username: str | None) -> User:
         stmt = select(User).where(User.id == tg_id)
         result = await self.session.execute(stmt)
-        user = result.scalar_allowed()
+        user = result.scalar_one_or_none()
 
         if not user:
             user = User(id=tg_id, username=username)
@@ -39,7 +39,7 @@ class BotRepository:
             .where(User.id == tg_id)
         )
         result = await self.session.execute(stmt)
-        user = result.scalar_allowed()
+        user = result.unique().scalar_one_or_none()
         return user.channels if user else []
 
     async def add_channel_to_user(self, tg_id: int, channel_username: str) -> bool:
@@ -49,13 +49,13 @@ class BotRepository:
 
         user_stmt = select(User).options(joinedload(User.channels)).where(User.id == tg_id)
         user_res = await self.session.execute(user_stmt)
-        user = user_res.scalar_allowed()
+        user = user_res.unique().scalar_one_or_none()
         if not user:
             return False
 
         ch_stmt = select(Channel).where(Channel.username == clean_username)
         ch_res = await self.session.execute(ch_stmt)
-        channel = ch_res.scalar_allowed()
+        channel = ch_res.scalar_one_or_none()
 
         if not channel:
             channel = Channel(username=clean_username, title=clean_username)
@@ -72,7 +72,7 @@ class BotRepository:
     async def remove_channel_from_user(self, tg_id: int, channel_username: str) -> bool:
         ch_stmt = select(Channel).where(Channel.username == channel_username)
         ch_res = await self.session.execute(ch_stmt)
-        channel = ch_res.scalar_allowed()
+        channel = ch_res.scalar_one_or_none()
         
         if not channel:
             return False

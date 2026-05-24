@@ -39,4 +39,5 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 async def init_models():
     from database.models import Base
     async with engine.begin() as conn:
+        #await conn.run_sync(Base.metadata.drop_all)   # Delete all from db on restart if necessary
         await conn.run_sync(Base.metadata.create_all)

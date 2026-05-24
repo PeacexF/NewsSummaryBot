@@ -15,7 +15,7 @@ venv/
 
 
 assets/*
-!prompt.md
+!prompt*.md
 # Один файл просто не может заигнорить чучело
 log.log
 *.log
