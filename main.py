@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import os
 
@@ -8,12 +10,46 @@ from log.log import logger
 from database.database import init_models, AsyncSessionLocal
 from database.repository import NewsRepository
 from process.filter import NewsFilter
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 load_dotenv()
 RSSHUB_BASE = os.getenv("RSSHUB_BASE")
 
 CHANNELS = ["durov", "rbc_news", "cybers"]
+
+async def run_parser_for_channels(channels: list[str], session: AsyncSession) -> None:
+    # Full chain fetcher function
+    if not channels:
+        logger.info("FETCHER | No channels provided for fetching.")
+        return
+
+    logger.info(f"FETCHER | Started fetching for channels: {channels}")
+    
+    collector = RSSCollector(timeout=30, max_connections=10)
+    await collector.start()
+    
+    urls = [RSSHUB_BASE.format(channel=ch) for ch in channels]
+    items = await collector.fetch_many(urls)
+    await collector.close()
+    
+    logger.info(f"FETCHER | Total posts fetched from RSSHub: {len(items)}")
+
+    if not items:
+        return
+
+    repo = NewsRepository(session)
+    await repo.save_rss_items(items)
+
+    logger.info("FETCHER | Starting deduplication process")
+    news_filter = NewsFilter(similarity_threshold=0.6, shingle_size=2)
+    
+    raw_posts = await news_filter.get_fresh_posts(session)
+    logger.info(f"FETCHER | Unprocessed posts in DB before filter: {len(raw_posts)}")
+    
+    filtered_posts = news_filter.filter_duplicates(raw_posts)
+    logger.info(f"FETCHER | Unique posts remaining after deduplication: {len(filtered_posts)}")
+
 
 async def main():
     logger.info("Initializing DB")

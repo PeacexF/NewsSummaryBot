@@ -5,15 +5,16 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from aiogram import Router, F
 from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BufferedInputFile
 
 from database.database import AsyncSessionLocal
 from database.bot_repo import BotRepository
-from log.log import logger # Need to debug state, temporary here
+from bot.services import SummaryService
 
 
 router = Router()
@@ -28,7 +29,7 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
             KeyboardButton(text="➕ Добавить канал")            # Adding a channel to a list of 'monitored' channels
         ],
         [
-            KeyboardButton(text="📝 Собрать сводку сейчас")     # To start the collection immediately
+            KeyboardButton(text="🔍 Собрать сводку сейчас")     # To start the collection immediately
         ],
         [
             KeyboardButton(text="⚙️ Настройки"),                # API keys later and other settings
@@ -93,9 +94,6 @@ async def process_delete_channel(callback: CallbackQuery):
 async def request_add_channel(message: Message, state: FSMContext):
     await state.set_state(ChannelForm.waiting_for_username)
 
-    current_state = await state.get_state()
-    logger.info(f"FSM | User {message.from_user.id} set state to: {current_state}")
-
     await message.answer(
         "📝 **Отправь мне юзернейм канала**\n\n"
         "Например, если канал доступен по ссылке `t.me/durov`, то отправь мне просто `durov` или `@durov`.",
@@ -105,9 +103,8 @@ async def request_add_channel(message: Message, state: FSMContext):
 @router.message(ChannelForm.waiting_for_username)
 async def process_channel_username(message: Message, state: FSMContext):
     username_input = message.text.strip()
-    logger.info(f"FSM | Catching username input {username_input} from user {message.from_user.id}")
     
-    if username_input in ["📋 Мои каналы", "➕ Добавить канал", "🚀 Собрать сводку сейчас", "⚙️ Настройки"]:
+    if username_input in ["📋 Мои каналы", "➕ Добавить канал", "🔍 Собрать сводку сейчас", "⚙️ Настройки"]:
         await state.clear()
         await message.answer("Добавление канала отменено")
         return
@@ -123,18 +120,44 @@ async def process_channel_username(message: Message, state: FSMContext):
     else:
         await message.answer("Этот канал уже есть в твоем списке. Попробуй другой")
 
-@router.message(F.text == "📝 Собрать сводку сейчас")
-async def manual_summary_trigger(message: Message):
-    # Absolutely useless currently and isn't doing anything
-    # It's just sending a message rn 
-    await message.answer(
+@router.message(F.text == "🔍 Собрать сводку сейчас")
+async def manual_summary_trigger(message: Message, state: FSMContext):
+    # Does a full data cycle to display a summary
+    await state.clear()
+
+    status_message = await message.answer(
         "⏳ *Запускаю сбор новостей и фильрацию...*\n\n"
         "Беру данные с RSSHub, проверяю базу данных и запускаю все процессы для работы с данными.\n"
-        "Это займет менее 30 секунд.",
+        "Это займет менее 20 секунд.",  # realistically less than 10 or even 5 seconds, but okay, python is slow right? right?
         parse_mode="Markdown"
         )
+
+    async with AsyncSessionLocal() as session:
+        summary_service = SummaryService(session)
+        
+        file_buffer = await summary_service.generate_user_txt_summary(message.from_user.id)
     
-    await message.answer("🛠 *Здесь будет отправка готового .txt файла source*", parse_mode="Markdown")
+    if not file_buffer:
+        await status_message.delete()
+        await message.answer(
+            "📭 *Твоя лента пуста!*\n\n"
+            "За последние 24 часа в твоих каналах не появилось новых постов, "
+            "либо ты уже собрал все актуальные сводки.",
+            parse_mode="Markdown"
+        )
+        return
+
+    current_date = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    document_file = BufferedInputFile(
+        file_buffer.getvalue(), 
+        filename=f"sources_{current_date}.txt"
+    )
+
+    await status_message.delete()
+    await message.answer_document(
+        document=document_file,
+        caption="📋 *Твоя сводка первоисточников готова!*\n\nВ файле собраны все свежие посты из каналов на твоем мониторинге",  parse_mode="Markdown"
+    )
 
 
 @router.message(F.text == "⚙️ Настройки")
@@ -161,14 +184,12 @@ async def show_info(message: Message):
         "*Политика*: *BYOK*. Вы приносите свой ключ от LLM(нейронки), который позже используете только вы и только для своих запросов. Ключи зашифрованы и находятся на защищенном сервере\n\n"
         "Список поддерживаемых Нейросетей:\n"
         "> Gemini etc...\n\n"
-        "Функции и другая информация о боте доступна по [ссылке на документацию]()\n"
-        "Также есть [гайд]() на получение бесплатных API ключей\n"
+        "Функции и другая информация о боте доступна по [ссылке на документацию](https://github.com/PeacexF/NewsSummaryBot/tree/main/Documentation)\n"
+        "Также есть гайд на получение бесплатных API ключей на [гитхабе](https://github.com/PeacexF/NewsSummaryBot/tree/main/Documentation/Manuals) и в телеграм [статье]()\n"
         "Поддержать создателя:"
     )
     await message.answer(info_text, parse_mode="Markdown")
 
 @router.message()
 async def echo_unhandled(message: Message, state: FSMContext):
-    current_state = await state.get_state()
-    logger.warning(f"FSM | Unhandled message, Text: {message.text} Current User State: {current_state}")
-    await message.answer("неразпознал твое сообщение / комманду. Или ты отправил ссылку на канал в неправильном формате")
+    await message.answer("неразпознал твое сообщение / комманду :(")
