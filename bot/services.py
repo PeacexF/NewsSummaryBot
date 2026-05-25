@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload
 
 from database.models import User, Post, Channel
 from process.filter import NewsFilter
+from process.ai import GeminiSummarizer
 from main import run_parser_for_channels 
 
 
@@ -95,3 +96,20 @@ class SummaryService:
         await self.session.commit()
         
         return output
+    
+    async def generate_ai_summary(self, filtered_posts: list[Post], user_plain_key: str) -> str | None:
+
+        if not filtered_posts:
+            return None
+            
+        news_filter = NewsFilter()
+        ai_xml_input = news_filter.format_for_ai(filtered_posts)
+        
+        try:
+            summarizer = GeminiSummarizer(api_key=user_plain_key)
+            ai_summary_text = await summarizer.generate_summary(ai_xml_input)
+            return ai_summary_text
+        except Exception as e:
+            from log.log import logger
+            logger.error(f"SERVICE | Failed to generate AI summary: {e}")
+            return None

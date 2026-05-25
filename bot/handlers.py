@@ -15,7 +15,10 @@ from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKe
 from database.database import AsyncSessionLocal
 from database.bot_repo import BotRepository
 from bot.services import SummaryService
-
+from database.models import Post, User
+from sqlalchemy.orm import joinedload
+from datetime import datetime, timezone, timedelta
+from sqlalchemy import select
 
 router = Router()
 
@@ -139,6 +142,19 @@ async def manual_summary_trigger(message: Message, state: FSMContext):
     # Does a full data cycle to display a summary
     await state.clear()
 
+    async with AsyncSessionLocal() as session:
+        repo = BotRepository(session)
+        user_key = await repo.get_user_api_key(message.from_user.id)
+
+    if not user_key:
+        await message.answer(
+            "⚠️ *Вы не привязали свой API-ключ Gemini!*\n\n"
+            "Пожалуйста, перейдите в раздел `⚙️ Настройки` и добавьте свой личный ключ. "
+            "Это безопасно, бесплатно и сделает вас независимым от лимитов сервера.",
+            parse_mode="Markdown"
+        )
+        return
+    
     status_message = await message.answer(
         "⏳ *Запускаю сбор новостей и фильрацию...*\n\n"
         "Беру данные с RSSHub, проверяю базу данных и запускаю все процессы для работы с данными.\n"
@@ -155,11 +171,30 @@ async def manual_summary_trigger(message: Message, state: FSMContext):
         await status_message.delete()
         await message.answer(
             "📭 *Твоя лента пуста!*\n\n"
-            "За последние 24 часа в твоих каналах не появилось новых постов, "
-            "либо ты уже собрал все актуальные сводки.",
+            "За последние 24 часа в твоих каналах не появилось новых постов, либо ты уже собрал все актуальные сводки.",
             parse_mode="Markdown"
         )
         return
+
+
+    user_res = await session.execute(select(User).options(joinedload(User.channels)).where(User.id == message.from_user.id))
+    user = user_res.unique().scalar_one_or_none()
+    channel_ids = [ch.id for ch in user.channels] if user else []
+
+    time_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
+    posts_stmt = (
+        select(Post)
+        .options(joinedload(Post.channel))
+        .where(Post.channel_id.in_(channel_ids))
+        .where(Post.fetched_at >= time_threshold)
+        .order_by(Post.published_at.asc())
+    )
+    posts_res = await session.execute(posts_stmt)
+    all_posts = posts_res.unique().scalars().all()
+    from process.filter import NewsFilter
+    filtered_posts = NewsFilter(similarity_threshold=0.6, shingle_size=2).filter_duplicates(all_posts)
+
+    ai_summary_text = await summary_service.generate_ai_summary(filtered_posts, user_key)
 
     current_date = datetime.now().strftime("%Y-%m-%d_%H-%M")
     document_file = BufferedInputFile(
@@ -168,9 +203,22 @@ async def manual_summary_trigger(message: Message, state: FSMContext):
     )
 
     await status_message.delete()
+
+    if ai_summary_text:
+        await message.answer(
+            text=f"✨*ИИ-СВОДКА*✨\n\n{ai_summary_text}",
+            parse_mode="Markdown"
+        )
+    else:
+        await message.answer(
+            text="⚠️ *Ошибка ИИ:* Не удалось сгенерировать сводку через ваш API-ключ. Проверьте его валидность в настройках.",
+            parse_mode="Markdown"
+        )
+
     await message.answer_document(
         document=document_file,
-        caption="📋 *сводка первоисточников готова*\n\nВ файле собраны все свежие посты из каналов на твоем мониторинге",  parse_mode="Markdown"
+        caption="📋 *Файл первоисточников*\nЗдесь собраны полные тексты всех уникальных постов, на которых базировался ИИ.",
+        parse_mode="Markdown"
     )
 
 
@@ -282,7 +330,7 @@ async def show_info(message: Message):
         "> Gemini etc...\n\n"
         "Функции и другая информация о боте доступна по [ссылке на документацию](https://github.com/PeacexF/NewsSummaryBot/tree/main/Documentation)\n"
         "Также есть гайд на получение бесплатных API ключей на [гитхабе](https://github.com/PeacexF/NewsSummaryBot/tree/main/Documentation/Manuals) и в телеграм [статье]()\n"
-        "Поддержать создателя:"
+        "Поддержать создателя: [Cryptobot_USDT](https://t.me/send?start=IV3YZQmgcBKf) "
     )
     await message.answer(info_text, parse_mode="Markdown")
 
