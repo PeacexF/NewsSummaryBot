@@ -22,6 +22,9 @@ router = Router()
 class ChannelForm(StatesGroup):
     waiting_for_username = State()
 
+class SettingsForm(StatesGroup):
+    waiting_for_gemini_key = State()
+
 def get_main_keyboard() -> ReplyKeyboardMarkup:
     kb = [
         [
@@ -37,6 +40,17 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
         ]
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+
+def get_settings_keyboard(has_key: bool) -> InlineKeyboardMarkup:
+    buttons = []
+    
+    if has_key:
+        buttons.append([InlineKeyboardButton(text="🔄 Изменить API Ключ", callback_data="set_key_gemini")])
+        buttons.append([InlineKeyboardButton(text="🗑 Удалить API Ключ", callback_data="delete_key_gemini")])
+    else:
+        buttons.append([InlineKeyboardButton(text="🔑 Добавить API Ключ", callback_data="set_key_gemini")])
+        
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 @router.message(CommandStart())
@@ -156,22 +170,104 @@ async def manual_summary_trigger(message: Message, state: FSMContext):
     await status_message.delete()
     await message.answer_document(
         document=document_file,
-        caption="📋 *Твоя сводка первоисточников готова!*\n\nВ файле собраны все свежие посты из каналов на твоем мониторинге",  parse_mode="Markdown"
+        caption="📋 *сводка первоисточников готова*\n\nВ файле собраны все свежие посты из каналов на твоем мониторинге",  parse_mode="Markdown"
     )
 
 
 @router.message(F.text == "⚙️ Настройки")
-async def show_settings(message: Message):
-    # Settings display
-    # need to add buttons for actual good and comfortable UI
+async def show_settings(message: Message, state: FSMContext):
+    await state.clear()
+    
+    async with AsyncSessionLocal() as session:
+        repo = BotRepository(session)
+        api_key = await repo.get_user_api_key(message.from_user.id)
+        
+    if api_key:
+        visible_len = 4
+        masked_key = f"`{api_key[:visible_len]}...{api_key[-visible_len:]}`"
+        status_text = f"🟢 *Привязан твой личный ключ:* {masked_key}"
+        has_key = True
+    else:
+        status_text = "🟡 *Используется глобальный ключ сервера* (действуют общие лимиты)."
+        has_key = False
+
     settings_text = (
         "⚙️ *Настройки системы*\n\n"
-        "🤖 *Текущая LLM:* Gemini 1.5 Flash (Default)\n"
-        "🔑 *API Ключ:* Используется глобальный ключ сервера.\n\n"
-        "ℹ️ _В следующих обновлениях сюда будет добавлен раздел для привязки твоего личного API-ключа, "
-        "чтобы сделать использование бота полностью бесплатным и независимым от лимитов сервера и смена языка_"
+        f"{status_text}\n\n"
+        "Вы можете привязать собственный API-ключ Gemini. Он будет зашифрован "
+        "и использован исключительно для обработки ваших личных запросов, делая работу абсолютно независимой."
     )
-    await message.answer(settings_text, parse_mode="Markdown")
+    
+    await message.answer(
+        text=settings_text, 
+        parse_mode="Markdown", 
+        reply_markup=get_settings_keyboard(has_key)
+    )
+
+@router.callback_query(F.data == "set_key_gemini")
+async def process_set_key_callback(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.set_state(SettingsForm.waiting_for_gemini_key)
+    
+    await callback.message.answer(
+        "🔑 *Отправь мне свой API-ключ Gemini.*\n\n"
+        "Получить бесплатный ключ можно в Google AI Studio.\n"
+        "Строка ключа обычно начинается с `AIzaSy...`\n\n"
+        "Для отмены отправь любую команду из главного меню.",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(SettingsForm.waiting_for_gemini_key)
+async def process_gemini_key_input(message: Message, state: FSMContext):
+    raw_key = message.text.strip()
+    
+    if raw_key in ["📋 Мои каналы", "➕ Добавить канал", "🔍 Собрать сводку сейчас", "⚙️ Настройки", "ℹ️ Информация"]:
+        await state.clear()
+        await message.answer("Ввод API-ключа отменен.")
+        return
+
+    if not raw_key.startswith("AIzaSy") or len(raw_key) < 20:
+        await message.answer(
+            "❌ *Непохоже на валидный ключ Gemini.*\n"
+            "Ключ от Google AI Studio должен начинаться с `AIzaSy` и быть достаточно длинным. "
+            "Попробуй скопировать заново или нажми кнопку меню для отмены.",
+            parse_mode="Markdown"
+        )
+        return
+
+    async with AsyncSessionLocal() as session:
+        repo = BotRepository(session)
+        success = await repo.update_user_api_key(message.from_user.id, raw_key)
+        
+    if success:
+        await message.answer("*Ваш API-ключ успешно зашифрован и сохранен!* Теперь бот будет использовать его.", parse_mode="Markdown")
+        await state.clear()
+    else:
+        await message.answer("Произошла ошибка при сохранении ключа. Попробуйте позже.")
+        await state.clear()
+
+
+@router.callback_query(F.data == "delete_key_gemini")
+async def process_delete_key_callback(callback: CallbackQuery):
+    async with AsyncSessionLocal() as session:
+        repo = BotRepository(session)
+        success = await repo.delete_user_api_key(callback.from_user.id)
+        
+    if success:
+        await callback.answer("Ключ успешно удален", show_alert=True)
+        settings_text = (
+            "⚙️ *Настройки системы*\n\n"
+            "*API Ключ успешно удален.*\n"
+            "*Используется глобальный ключ сервера* (действуют общие лимиты)."
+        )
+        await callback.message.edit_text(
+            text=settings_text,
+            parse_mode="Markdown",
+            reply_markup=get_settings_keyboard(has_key=False)
+        )
+    else:
+        await callback.answer("Ошибка: у вас не было привязанного ключа", show_alert=True)
 
 @router.message(F.text == "ℹ️ Информация")
 async def show_info(message: Message):

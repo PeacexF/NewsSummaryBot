@@ -9,3 +9,5 @@ sqlalchemy
 asyncpg
 greenlet
 aiogram
+google-genai
+cryptography

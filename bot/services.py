@@ -1,5 +1,5 @@
 # Connecting the main backend(data collection) to the UI(bot)
-# Gets posts from db and sends to user
+# Gets posts from db + RSS and sends to user
 
 from __future__ import annotations
 

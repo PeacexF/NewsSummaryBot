@@ -32,7 +32,7 @@ class User(Base):
         default=lambda: datetime.now(timezone.utc),
         server_default=func.now()
     )
-    
+    gemini_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_summary_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     channels: Mapped[List[Channel]] = relationship(

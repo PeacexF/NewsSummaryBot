@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from database.models import User, Channel, user_channels
+from database.crypto import encrypt_key, decrypt_key
 
 
 class BotRepository:
@@ -85,3 +86,37 @@ class BotRepository:
         await self.session.execute(stmt)
         await self.session.commit()
         return True
+
+    async def update_user_api_key(self, tg_id: int, plain_key: str) -> bool:
+        stmt = select(User).where(User.id == tg_id)
+        result = await self.session.execute(stmt)
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            return False
+            
+        user.gemini_api_key = encrypt_key(plain_key)
+        await self.session.commit()
+        return True
+
+    async def delete_user_api_key(self, tg_id: int) -> bool:
+        stmt = select(User).where(User.id == tg_id)
+        result = await self.session.execute(stmt)
+        user = result.scalar_one_or_none()
+        
+        if not user or not user.gemini_api_key:
+            return False
+            
+        user.gemini_api_key = None
+        await self.session.commit()
+        return True
+
+    async def get_user_api_key(self, tg_id: int) -> str | None:
+        stmt = select(User).where(User.id == tg_id)
+        result = await self.session.execute(stmt)
+        user = result.scalar_one_or_none()
+        
+        if not user or not user.gemini_api_key:
+            return None
+            
+        return decrypt_key(user.gemini_api_key)
