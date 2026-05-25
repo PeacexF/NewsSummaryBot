@@ -102,7 +102,7 @@ class SummaryService:
 
         if not filtered_posts:
             return None
-            
+
         news_filter = NewsFilter()
 
         sorted_posts = sorted(
@@ -110,10 +110,10 @@ class SummaryService:
             key=lambda p: p.channel.username.lower() if (p.channel and p.channel.username) else ""
         )
 
-        chunk_size = 10
+        chunk_size = 20
         posts_chunks = [sorted_posts[i:i + chunk_size] for i in range(0, len(sorted_posts), chunk_size)]
         
-        logger.info(f"SERVICE | Всего постов для ИИ: {len(sorted_posts)}. Разбито на пачек: {len(posts_chunks)}")
+        logger.info(f"SERVICE | total posts for ai: {len(sorted_posts)}. packs of 20: {len(posts_chunks)}")
 
         xml_chunks = [news_filter.format_for_ai(chunk) for chunk in posts_chunks]
 
@@ -124,22 +124,28 @@ class SummaryService:
             if len(xml_chunks) > 1:
                 cache_name = await summarizer.create_context_cache(ttl_seconds=300)
 
-            tasks = [
-                summarizer.generate_chunk_summary(xml_chunk, cache_name=cache_name)
-                for xml_chunk in xml_chunks
-            ]
+            valid_summaries = []
 
-            chunk_results = await asyncio.gather(*tasks)
-
-            valid_summaries = [res for res in chunk_results if res]
+            for idx, xml_chunk in enumerate(xml_chunks, start=1):
+                logger.info(f"SERVICE | sending to ai, pack num: {idx} out of {len(xml_chunks)}")
+                
+                summary_chunk = await summarizer.generate_chunk_summary(xml_chunk, cache_name=cache_name)
+                
+                if summary_chunk:
+                    valid_summaries.append(summary_chunk)
+                
+                if idx < len(xml_chunks):
+                    logger.info("SERVICE | Waiting to avoid rate limits...")
+                    await asyncio.sleep(11.0)       # 5 RPM max -> 60 / 5 == 12
+                                                    # Each request takes a second or two, so 12 - 1 == 11
 
             if not valid_summaries:
-                logger.warning("SERVICE | Not a sigle valid pack in a summary")
+                logger.warning("SERVICE | No valid summaries returned.")
                 return None
 
             final_summary_text = "\n\n".join(valid_summaries)
             return final_summary_text
 
         except Exception as e:
-            logger.error(f"SERVICE | shit happened: {e}")
+            logger.error(f"SERVICE | error: {e}")
             return None

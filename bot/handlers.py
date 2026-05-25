@@ -10,7 +10,7 @@ from aiogram import Router, F
 from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BufferedInputFile
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BufferedInputFile, LinkPreviewOptions
 
 from database.database import AsyncSessionLocal
 from database.bot_repo import BotRepository
@@ -63,6 +63,26 @@ def get_cancel_adding_keyboard() -> InlineKeyboardMarkup:
         ]
     )
 
+def build_channels_keyboard(channels: list) -> InlineKeyboardMarkup:
+    keyboard_buttons = []
+    row = []
+    
+    for channel in channels:
+        btn = InlineKeyboardButton(
+            text=f"@{channel.username}", 
+            callback_data=f"del_ch:{channel.id}"
+        )
+        row.append(btn)
+        
+        if len(row) == 2:
+            keyboard_buttons.append(row)
+            row = []
+            
+    if row:
+        keyboard_buttons.append(row)
+        
+    return InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
     await state.clear()     # Clearing state
@@ -81,38 +101,63 @@ async def cmd_start(message: Message, state: FSMContext):
     await message.answer(welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
 @router.message(F.text == "📋 Мои каналы")
-async def show_channels(message: Message, state: FSMContext):
+async def show_user_channels(message: Message, state: FSMContext):
     await state.clear()
+
     async with AsyncSessionLocal() as session:
         repo = BotRepository(session)
-        # Getting the user's channels to display them
         user_channels = await repo.get_user_channels(message.from_user.id)
-    
+
     if not user_channels:
-        await message.answer("😢 У тебя пока нет добавленных каналов для мониторинга, используй кнопку `Добавить канал`", parse_mode="Markdown")
+        await message.answer(
+            "📭 *Ваш список каналов пуст.*\n\n"
+            "Используйте кнопку `➕ Добавить канал`, чтобы настроить свою ленту.",
+            parse_mode="Markdown"
+        )
         return
 
-    await message.answer("🗂 *Твои каналы на мониторинге:*\nНажми кнопку под каналом, если хочешь удалить его из своей ленты:", parse_mode="Markdown")
-
-    for channel in user_channels:
-        inline_kb = InlineKeyboardMarkup(inline_keyboard=[  # I will remake the display method, i think it's quite verbose rn
-            [InlineKeyboardButton(text="❌ Удалить", callback_data=f"delete_ch:{channel.username}")]
-        ])
-        await message.answer(f"📢 *@{channel.username}*", reply_markup=inline_kb, parse_mode="Markdown")
-
-@router.callback_query(F.data.startswith("delete_ch:"))
-async def process_delete_channel(callback: CallbackQuery):
-    channel_username = callback.data.split(":", 1)[-1]
+    reply_markup = build_channels_keyboard(user_channels)
     
+    await message.answer(
+        "📋 **Ваш список каналов**\n\n"
+        "Нажмите на название канала ниже, чтобы удалить его из своей ленты:",
+        parse_mode="Markdown",
+        reply_markup=reply_markup
+    )
+
+@router.callback_query(F.data.startswith("del_ch:"))
+async def process_delete_channel(callback: CallbackQuery):
+    channel_id = int(callback.data.split(":")[1])
+    user_id = callback.from_user.id
+
     async with AsyncSessionLocal() as session:
         repo = BotRepository(session)
-        success = await repo.remove_channel_from_user(callback.from_user.id, channel_username)
         
-    if success:
-        await callback.answer(f"Канал удален: {channel_username}")
-        await callback.message.delete()
-    else:
-        await callback.answer("Ошибка: не удалось удалить канал", show_alert=True)
+        success, channel_username = await repo.remove_channel_from_user(user_id, channel_id)
+        
+        updated_channels = await repo.get_user_channels(user_id)
+
+    if not success:
+        await callback.answer("Ошибка: Канал не найден или уже удален.", show_alert=True)
+        return
+
+    await callback.answer(f"Удалено: @{channel_username}")
+
+    if not updated_channels:
+        await callback.message.edit_text(
+            "📭 *Вы удалили все каналы из подписок.*\n\n"
+            "Ваш список теперь пуст.",
+            parse_mode="Markdown",
+            reply_markup=None
+        )
+        return
+
+    new_markup = build_channels_keyboard(updated_channels)
+    
+    try:
+        await callback.message.edit_reply_markup(reply_markup=new_markup)
+    except Exception:
+        pass
 
 @router.message(F.text == "➕ Добавить канал")
 async def start_add_channel(message: Message, state: FSMContext):
@@ -194,8 +239,8 @@ async def manual_summary_trigger(message: Message, state: FSMContext):
     
     status_message = await message.answer(
         "⏳ *Запускаю сбор новостей и фильрацию...*\n\n"
-        "Беру данные с RSSHub, проверяю базу данных и запускаю все процессы для работы с данными.\n"
-        "Это займет менее 20 секунд.",
+        "Беру данные с RSSHub, проверяю базу данных и запускаю все процессы для работы с данными и отправляю в ИИ.\n"
+        "Это займет достаточно много времени, можешь пока отойти.",
         parse_mode="Markdown"
         )
 
@@ -368,11 +413,12 @@ async def show_info(message: Message):
         "Список поддерживаемых Нейросетей:\n"
         "> Gemini etc...\n\n"
         "Функции и другая информация о боте доступна по [ссылке на документацию](https://github.com/PeacexF/NewsSummaryBot/tree/main/Documentation)\n"
-        "Также есть гайд на получение бесплатных API ключей на [гитхабе](https://github.com/PeacexF/NewsSummaryBot/tree/main/Documentation/Manuals) и в телеграм [статье]()\n"
+        "Также есть гайд на получение бесплатных API ключей на [гитхабе](https://github.com/PeacexF/NewsSummaryBot/tree/main/Documentation/Manuals) и в телеграм [статье](https://telegra.ph/Manual-polucheniya-API-klyucha-ot-Gemini-05-25)\n"
         "Поддержать создателя: [Cryptobot_USDT](https://t.me/send?start=IV3YZQmgcBKf) "
     )
-    await message.answer(info_text, parse_mode="Markdown")
+    await message.answer(info_text, parse_mode="Markdown", link_preview_options=LinkPreviewOptions(is_disabled=True)
+)
 
 @router.message()
 async def echo_unhandled(message: Message, state: FSMContext):
-    await message.answer("неразпознал твое сообщение / комманду :(")
+    await message.answer("не разпознал твое сообщение / комманду :(\nпопробуй перезапустить через `/start` и используй клавиатуру", parse_mode="Markdown")
