@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import io
+import asyncio
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,7 @@ from database.models import User, Post, Channel
 from process.filter import NewsFilter
 from process.ai import GeminiSummarizer
 from main import run_parser_for_channels 
+from log.log import logger
 
 
 class SummaryService:
@@ -41,8 +43,7 @@ class SummaryService:
             await run_parser_for_channels(active_channels, self.session)
             await self.session.flush()
         except Exception as e:
-            from log.log import logger
-            logger.error(f"Parser Error during manual trigger for user {tg_id}: {e}")
+            logger.error(f"SERVICE | Parser Error during manual trigger for user {tg_id}: {e}")
 
         time_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
         posts_stmt = (
@@ -103,13 +104,42 @@ class SummaryService:
             return None
             
         news_filter = NewsFilter()
-        ai_xml_input = news_filter.format_for_ai(filtered_posts)
+
+        sorted_posts = sorted(
+            filtered_posts, 
+            key=lambda p: p.channel.username.lower() if (p.channel and p.channel.username) else ""
+        )
+
+        chunk_size = 10
+        posts_chunks = [sorted_posts[i:i + chunk_size] for i in range(0, len(sorted_posts), chunk_size)]
         
+        logger.info(f"SERVICE | Всего постов для ИИ: {len(sorted_posts)}. Разбито на пачек: {len(posts_chunks)}")
+
+        xml_chunks = [news_filter.format_for_ai(chunk) for chunk in posts_chunks]
+
         try:
             summarizer = GeminiSummarizer(api_key=user_plain_key)
-            ai_summary_text = await summarizer.generate_summary(ai_xml_input)
-            return ai_summary_text
+
+            cache_name = None
+            if len(xml_chunks) > 1:
+                cache_name = await summarizer.create_context_cache(ttl_seconds=300)
+
+            tasks = [
+                summarizer.generate_chunk_summary(xml_chunk, cache_name=cache_name)
+                for xml_chunk in xml_chunks
+            ]
+
+            chunk_results = await asyncio.gather(*tasks)
+
+            valid_summaries = [res for res in chunk_results if res]
+
+            if not valid_summaries:
+                logger.warning("SERVICE | Not a sigle valid pack in a summary")
+                return None
+
+            final_summary_text = "\n\n".join(valid_summaries)
+            return final_summary_text
+
         except Exception as e:
-            from log.log import logger
-            logger.error(f"SERVICE | Failed to generate AI summary: {e}")
+            logger.error(f"SERVICE | shit happened: {e}")
             return None

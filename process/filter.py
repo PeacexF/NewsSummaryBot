@@ -96,14 +96,25 @@ class NewsFilter:
         return unique_posts
 
     def format_for_ai(self, filtered_posts: list[Post]) -> str:
-        # Packs into XML
+        # Sorts by source and packs into XML
+        if not filtered_posts:
+            return ""
+
+        sorted_posts = sorted(
+            filtered_posts, 
+            key=lambda post: post.channel.username.lower() if (post.channel and post.channel.username) else ""
+        )
+
         formatted_blocks = []
-        for _, post in enumerate(filtered_posts, 1):
+        for post in sorted_posts:
+            channel_name = post.channel.username if (post.channel and post.channel.username) else "unknown_source"
+            
             block = (
                 f"<post id='{post.id}'>\n"
-                f"<source>@{post.channel.username}</source>\n"
+                f"<source>@{channel_name}</source>\n"
                 f"<text>{post.text}</text>\n"
                 f"</post>"
             )
             formatted_blocks.append(block)
+            
         return "\n\n".join(formatted_blocks)

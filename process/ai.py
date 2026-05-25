@@ -8,7 +8,7 @@
 # Like yeah i'll do it that honestly sounds fire af, bring your own free keys and just simply rotate them with infinite accounts
 # The backend here is going to be insane, yeah, but i think it's worth it
 
-# For now i'm only doing Gemini tho
+# For now i'm only doing Gemini tho and it's already pretty hard to make it work
 
 from __future__ import annotations
 
@@ -38,31 +38,54 @@ class GeminiSummarizer:
             logger.error(f"AI | Failed to load system prompt from {self.prompt_path}: {e}")
             return "Ты — ИИ-ассистент. Сделай краткую выжимку присланных новостей в формате Markdown на русском языке."
 
-    async def generate_summary(self, xml_data: str) -> str | None:
-        logger.info("AI | Requesting summary generation from LLM...")
-        system_instruction = self._load_system_prompt()
-
+    async def create_context_cache(self, ttl_seconds: int = 300) -> str | None:
+        # Caching the prompt for efficiency and economy of input tokens, returns cache id
         try:
-            config = types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0.3,
-                max_output_tokens=4096,
+            system_instruction = self._load_system_prompt()
+            
+            cache = await asyncio.to_thread(
+                self.client.caches.create,
+                model=self.model_name,
+                config=types.CreateCachedContentConfig(
+                    contents=system_instruction,
+                    ttl=f"{ttl_seconds}s", 
+                    display_name="news_summary_prompt_cache"
+                )
             )
+            logger.info(f"AI | Succes caching your fucking prompt of slop. ID: {cache.name}")
+            return cache.name
+        except Exception as e:
+            logger.error(f"AI | Not a Succes caching your fucking prompt of slop: {e}")
+            return None
+
+    async def generate_chunk_summary(self, xml_chunk: str, cache_name: str | None = None) -> str | None:
+        # we separate it into packs so the model isn't drowning and aborting it's job in because of well structured and sorted for it xml input
+        try:
+            config_params = {
+                "temperature": 0.2,
+                "max_output_tokens": 4096,
+            }
+
+            if cache_name:
+                config_params["cached_content"] = cache_name
+            else:
+                config_params["system_instruction"] = self._load_system_prompt()
+
+            config = types.GenerateContentConfig(**config_params)
+
+            user_content = f"Вот пачка новостей для обработки:\n\n{xml_chunk}"
 
             response = await asyncio.to_thread(
                 self.client.models.generate_content,
                 model=self.model_name,
-                contents=f"Вот актуальные посты для анализа:\n\n{xml_data}",
+                contents=user_content,
                 config=config
             )
 
             if response and response.text:
-                logger.info("AI | Summary generated successfully.")
-                return response.text
-                
-            logger.warning("AI | Gemini returned an empty response.")
+                return response.text.strip()
             return None
 
         except Exception as e:
-            logger.error(f"AI | Error during generation: {e}")
+            logger.error(f"AI | Problem with a pack: {e}")
             return None
