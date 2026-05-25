@@ -16,6 +16,7 @@ from database.database import AsyncSessionLocal
 from database.bot_repo import BotRepository
 from bot.services import SummaryService
 from database.models import Post, User
+from process.filter import NewsFilter
 from sqlalchemy.orm import joinedload
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select
@@ -38,7 +39,7 @@ def get_main_keyboard() -> ReplyKeyboardMarkup:
             KeyboardButton(text="🔍 Собрать сводку сейчас")     # To start the collection immediately
         ],
         [
-            KeyboardButton(text="⚙️ Настройки"),                # API keys later and other settings
+            KeyboardButton(text="⚙️ Настройки"),                # Settings
             KeyboardButton(text="ℹ️ Информация")                # Information about the project
         ]
     ]
@@ -55,6 +56,12 @@ def get_settings_keyboard(has_key: bool) -> InlineKeyboardMarkup:
         
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+def get_cancel_adding_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Завершить добавление", callback_data="stop_adding_channels")]
+        ]
+    )
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
@@ -108,34 +115,64 @@ async def process_delete_channel(callback: CallbackQuery):
         await callback.answer("Ошибка: не удалось удалить канал", show_alert=True)
 
 @router.message(F.text == "➕ Добавить канал")
-async def request_add_channel(message: Message, state: FSMContext):
+async def start_add_channel(message: Message, state: FSMContext):
     await state.set_state(ChannelForm.waiting_for_username)
-
     await message.answer(
-        "📝 **Отправь мне юзернейм канала**\n\n"
-        "Например, если канал доступен по ссылке `t.me/durov`, то отправь мне просто `durov` или `@durov`.",
-        parse_mode="Markdown"
+        "📝 **Режим добавления каналов**\n\n"
+        "Отправляй мне юзернеймы каналов по одному (например, `durov` или ссылку `https://t.me/rbc_news`).\n\n"
+        "Когда закончишь, нажми кнопку ниже 👇",
+        parse_mode="Markdown",
+        reply_markup=get_cancel_adding_keyboard()
     )
 
 @router.message(ChannelForm.waiting_for_username)
-async def process_channel_username(message: Message, state: FSMContext):
-    username_input = message.text.strip()
-    
-    if username_input in ["📋 Мои каналы", "➕ Добавить канал", "🔍 Собрать сводку сейчас", "⚙️ Настройки"]:
+async def process_channel_input(message: Message, state: FSMContext):
+    raw_input = message.text.strip()
+
+    if raw_input in ["📋 Мои каналы", "➕ Добавить канал", "🔍 Собрать сводку сейчас", "⚙️ Настройки", "ℹ️ Информация"]:
         await state.clear()
-        await message.answer("Добавление канала отменено")
+        await message.answer("Добавление каналов завершено.", reply_markup=get_main_keyboard())
         return
-    
+
+    username = raw_input.split("/")[-1].replace("@", "").strip()
+
+    if not username:
+        await message.answer("❌ Ссылка или юзернейм пустые. Попробуй еще раз.")
+        return
+
     async with AsyncSessionLocal() as session:
         repo = BotRepository(session)
-        success = await repo.add_channel_to_user(message.from_user.id, username_input)
-        
+        success = await repo.add_channel_to_user(message.from_user.id, username)
+
     if success:
-        clean_name = username_input.replace("@", "").replace("https://", "").split("/")[-1]
-        await message.answer(f"✅ *@{clean_name}* успешно добавлен в твой список", parse_mode="Markdown")
-        await state.clear()     # Exiting state
+        await message.answer(
+            f"✅ Канал **@{username}** успешно добавлен к твоим подпискам!\n\n"
+            "Жду следующий канал или нажмите кнопку завершения 👇",
+            parse_mode="Markdown",
+            reply_markup=get_cancel_adding_keyboard()
+        )
     else:
-        await message.answer("Этот канал уже есть в твоем списке. Попробуй другой")
+        await message.answer(
+            f"ℹ️ Канал **@{username}** уже есть в твоем списке подписок.\n\n"
+            "Можешь отправить другой канал:",
+            parse_mode="Markdown",
+            reply_markup=get_cancel_adding_keyboard()
+        )
+
+@router.callback_query(F.data == "stop_adding_channels")
+async def cb_stop_adding_channels(callback: CallbackQuery, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state == ChannelForm.waiting_for_username:
+        await state.clear()
+        await callback.answer("Готово!")
+        await callback.message.answer(
+            "📥 **Добавление каналов успешно завершено!**\n"
+            "Теперь вы можете обновить сводку или проверить список подписок.",
+            reply_markup=get_main_keyboard(),
+            parse_mode="Markdown"
+        )
+    else:
+        await callback.answer("Эта сессия добавления уже неактивна.")
 
 @router.message(F.text == "🔍 Собрать сводку сейчас")
 async def manual_summary_trigger(message: Message, state: FSMContext):
@@ -158,7 +195,7 @@ async def manual_summary_trigger(message: Message, state: FSMContext):
     status_message = await message.answer(
         "⏳ *Запускаю сбор новостей и фильрацию...*\n\n"
         "Беру данные с RSSHub, проверяю базу данных и запускаю все процессы для работы с данными.\n"
-        "Это займет менее 20 секунд.",  # realistically less than 10 or even 5 seconds, but okay, python is slow right? right?
+        "Это займет менее 20 секунд.",
         parse_mode="Markdown"
         )
 
@@ -191,10 +228,12 @@ async def manual_summary_trigger(message: Message, state: FSMContext):
     )
     posts_res = await session.execute(posts_stmt)
     all_posts = posts_res.unique().scalars().all()
-    from process.filter import NewsFilter
+
     filtered_posts = NewsFilter(similarity_threshold=0.6, shingle_size=2).filter_duplicates(all_posts)
 
-    ai_summary_text = await summary_service.generate_ai_summary(filtered_posts, user_key)
+    async with AsyncSessionLocal() as session_for_ai:
+        summary_service = SummaryService(session_for_ai)
+        ai_summary_text = await summary_service.generate_ai_summary(filtered_posts, user_key)
 
     current_date = datetime.now().strftime("%Y-%m-%d_%H-%M")
     document_file = BufferedInputFile(
@@ -206,7 +245,7 @@ async def manual_summary_trigger(message: Message, state: FSMContext):
 
     if ai_summary_text:
         await message.answer(
-            text=f"✨*ИИ-СВОДКА*✨\n\n{ai_summary_text}",
+            text=f"{ai_summary_text}",
             parse_mode="Markdown"
         )
     else:
@@ -217,7 +256,7 @@ async def manual_summary_trigger(message: Message, state: FSMContext):
 
     await message.answer_document(
         document=document_file,
-        caption="📋 *Файл первоисточников*\nЗдесь собраны полные тексты всех уникальных постов, на которых базировался ИИ.",
+        caption="*Файл первоисточников*",
         parse_mode="Markdown"
     )
 
