@@ -11,3 +11,4 @@ greenlet
 aiogram
 google-genai
 cryptography
+tenacity

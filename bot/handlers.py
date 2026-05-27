@@ -412,8 +412,8 @@ async def show_info(message: Message):
         "*Политика*: *BYOK*. Вы приносите свой ключ от LLM(нейронки), который позже используете только вы и только для своих запросов. Ключи зашифрованы и находятся на защищенном сервере\n\n"
         "Список поддерживаемых Нейросетей:\n"
         "> Gemini etc...\n\n"
-        "Функции и другая информация о боте доступна по [ссылке на документацию](https://github.com/PeacexF/NewsSummaryBot/tree/main/Documentation)\n"
-        "Также есть гайд на получение бесплатных API ключей на [гитхабе](https://github.com/PeacexF/NewsSummaryBot/tree/main/Documentation/Manuals) и в телеграм [статье](https://telegra.ph/Manual-polucheniya-API-klyucha-ot-Gemini-05-25)\n"
+        " Информация о функциях бота доступна по [ссылке на документацию](https://github.com/PeacexF/NewsSummaryBot/tree/main/docs)\n"
+        "Также есть гайд на получение бесплатных API ключей на [гитхабе](https://github.com/PeacexF/NewsSummaryBot/tree/main/docs/Manuals) и в телеграм [статье](https://telegra.ph/Manual-polucheniya-API-klyucha-ot-Gemini-05-25)\n"
         "Поддержать создателя: [Cryptobot_USDT](https://t.me/send?start=IV3YZQmgcBKf) "
     )
     await message.answer(info_text, parse_mode="Markdown", link_preview_options=LinkPreviewOptions(is_disabled=True)
@@ -421,4 +421,4 @@ async def show_info(message: Message):
 
 @router.message()
 async def echo_unhandled(message: Message, state: FSMContext):
-    await message.answer("не разпознал твое сообщение / комманду :(\nпопробуй перезапустить через `/start` и используй клавиатуру", parse_mode="Markdown")
+    await message.answer("не распознал твое сообщение / комманду :(\nпопробуй перезапустить через `/start` и используй клавиатуру", parse_mode="Markdown")

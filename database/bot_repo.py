@@ -70,13 +70,20 @@ class BotRepository:
         await self.session.commit()
         return True
 
-    async def remove_channel_from_user(self, tg_id: int, channel_username: str) -> bool:
-        ch_stmt = select(Channel).where(Channel.username == channel_username)
+    async def remove_channel_from_user(self, tg_id: int, channel_id: int | str) -> tuple[bool, str]:
+        try:
+            target_id = int(channel_id)
+        except (ValueError, TypeError):
+            return False, ""
+
+        ch_stmt = select(Channel).where(Channel.id == target_id)
         ch_res = await self.session.execute(ch_stmt)
         channel = ch_res.scalar_one_or_none()
         
         if not channel:
-            return False
+            return False, ""
+
+        username = channel.username
 
         stmt = (
             delete(user_channels)
@@ -85,7 +92,8 @@ class BotRepository:
         )
         await self.session.execute(stmt)
         await self.session.commit()
-        return True
+        
+        return True, username
 
     async def update_user_api_key(self, tg_id: int, plain_key: str) -> bool:
         stmt = select(User).where(User.id == tg_id)

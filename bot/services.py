@@ -120,16 +120,12 @@ class SummaryService:
         try:
             summarizer = GeminiSummarizer(api_key=user_plain_key)
 
-            cache_name = None
-            if len(xml_chunks) > 1:
-                cache_name = await summarizer.create_context_cache(ttl_seconds=300)
-
             valid_summaries = []
 
             for idx, xml_chunk in enumerate(xml_chunks, start=1):
                 logger.info(f"SERVICE | sending to ai, pack num: {idx} out of {len(xml_chunks)}")
                 
-                summary_chunk = await summarizer.generate_chunk_summary(xml_chunk, cache_name=cache_name)
+                summary_chunk = await summarizer.generate_chunk_summary(xml_chunk)
                 
                 if summary_chunk:
                     valid_summaries.append(summary_chunk)
