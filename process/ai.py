@@ -17,6 +17,8 @@ import asyncio
 
 from google import genai
 from google.genai import types
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+#from google.genai.errors import APIError
 
 from log.log import logger
 
@@ -59,6 +61,11 @@ class GeminiSummarizer:
     #         logger.error(f"AI | Not a Succes caching your fucking prompt of slop: {e}")
     #         return None
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=10),
+        reraise=True
+    )
     async def generate_chunk_summary(self, xml_chunk: str) -> str | None:
         try:
             system_instruction = self._load_system_prompt()
