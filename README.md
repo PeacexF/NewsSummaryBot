@@ -4,7 +4,7 @@ A Telegram bot that collects news from RSS feeds, processes them, deduplicates t
 
 ![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
-![XML](https://img.shields.io/badge/XML-005FAD?logo=xml&logoColor=white)  
+![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 
 The project is designed as a modular pipeline:  
@@ -14,11 +14,12 @@ The project is designed as a modular pipeline:
 
 ## Main Idea
 
-![News](https://img.shields.io/badge/News-FF6F00?logo=googlenews&logoColor=white)
-![Telegram](https://img.shields.io/badge/Telegram-26A5E4?logo=telegram&logoColor=white)
-![AI](https://img.shields.io/badge/AI-412991?logo=openai&logoColor=white)
+![RSS](https://img.shields.io/badge/RSS-24292F?logo=rss&logoColor=white)
+![News](https://img.shields.io/badge/News-24292F?logo=googlenews&logoColor=white)
+![Telegram](https://img.shields.io/badge/Telegram-24292F?logo=telegram&logoColor=white)
+![AI](https://img.shields.io/badge/AI-24292F?logo=openai&logoColor=white)
 
-The system follows a **pipeline** approach:
+### The system follows a **pipeline** approach:
 
 1. Collect RSS feed data from a self hosted rsshub
 2. Normalize and prepare raw articles
