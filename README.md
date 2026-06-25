@@ -2,6 +2,11 @@
 
 A Telegram bot that collects news from RSS feeds, processes them, deduplicates them, and delivers AI-generated summaries.
 
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![XML](https://img.shields.io/badge/XML-005FAD?logo=xml&logoColor=white)  
+
+
 The project is designed as a modular pipeline:  
 `data collection → storage → filtering → processing → delivery`
 
@@ -9,7 +14,11 @@ The project is designed as a modular pipeline:
 
 ## Main Idea
 
-The system follows a pipeline approach:
+![News](https://img.shields.io/badge/News-FF6F00?logo=googlenews&logoColor=white)
+![Telegram](https://img.shields.io/badge/Telegram-26A5E4?logo=telegram&logoColor=white)
+![AI](https://img.shields.io/badge/AI-412991?logo=openai&logoColor=white)
+
+The system follows a **pipeline** approach:
 
 1. Collect RSS feed data from a self hosted rsshub
 2. Normalize and prepare raw articles
@@ -19,11 +28,11 @@ The system follows a pipeline approach:
 6. Deliver results through a Telegram bot interface  
 
 ## Status
-I honestly can't continue working on it even tho i would like to.  
-Gemini's API rules are unbearable and it's impossible to make something good using it.  
-You either get rate limited, or you get a bad summary out of it.
-Caching isn't allowed, 5 RPM is not going to allow you to separate it nicely, their servers are flooded with requests all the time, causing *503* 24/7.
-And even if you do manage to get a response from it, it will just stop reading mid text and abort your request.
+>I honestly can't continue working on it even tho i would like to.  
+ Gemini's API rules are unbearable and it's impossible to make something good using it.  
+ You either get rate limited, or you get a bad summary out of it.
+ Caching isn't allowed, 5 RPM is not going to allow you to separate it nicely, their servers are flooded with requests all the time, causing *503* 24/7.
+ And even if you do manage to get a response from it, it will just stop reading mid text and abort your request.
 
 ---
 
