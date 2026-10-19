@@ -14,7 +14,6 @@ venv/
 *.sw?
 
 
-assets/*
 !prompt*.md
 # Один файл просто не может заигнорить чучело
 log.log
@@ -24,6 +23,4 @@ log/*
 log*
 log.log
 no_commit.log
-
-
-!cry.txt
+.github/private/
